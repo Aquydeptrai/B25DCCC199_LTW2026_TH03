@@ -1,19 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import './App.css';
 import { RESULT_LABELS, ROUNDS } from './data';
 import useFetch from './hooks/useFetch';
+import useLocalStorage from './hooks/useLocalStorage';
+import useDebounce from './hooks/useDebounce';
 import { removeMatch, selectMatches, setGoals, setMatches } from './features/matchesSlice';
+import { hasSaved } from './store';
 import { useTheme } from './context/ThemeContext';
 import { useNotice } from './context/NoticeContext';
-import { calcMatchStats, calcStandings, getResult, getTeamName } from './utils';
+import { calcMatchStats, calcStandings, getTeamName } from './utils';
 import AddMatchForm from './components/AddMatchForm';
 import StandingsTable from './components/StandingsTable';
 import GoalPlanner from './components/GoalPlanner';
+import MatchRow from './components/MatchRow';
 
 const BUILD_TAG = "bd-5918";
 
-const DRAW_BG = 'rgba(255, 193, 7, 0.25)';
+const APP_TITLE = 'Giải bóng đá khoa';
 
 function App() {
   const { data, loading, error } = useFetch('/data/matches.json');
@@ -21,36 +25,105 @@ function App() {
   const dispatch = useDispatch();
   const showNotice = useNotice();
   const { theme, toggleTheme } = useTheme();
-  const [round, setRound] = useState('all');
+  const [storedRound, setRound] = useLocalStorage('ltw_bongda_round', 'all');
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
+  const searchRef = useRef(null);
+
+  const round =
+    storedRound === 'all' || ROUNDS.includes(Number(storedRound)) ? String(storedRound) : 'all';
+
 
   useEffect(() => {
-    if (data) {
+    if (!hasSaved && data) {
       dispatch(setMatches(data));
     }
   }, [data, dispatch]);
 
-  // Bảng xếp hạng luôn tính trên tất cả các trận
+  
   const standings = useMemo(() => calcStandings(matches), [matches]);
 
-  // Các trận đang xem theo ô lọc vòng
-  const visible = useMemo(
+  
+  const byRound = useMemo(
     () => (round === 'all' ? matches : matches.filter((m) => m.round === Number(round))),
     [matches, round]
   );
 
-  const stats = useMemo(() => calcMatchStats(visible), [visible]);
+ 
+  const visible = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
+    if (keyword === '') {
+      return byRound;
+    }
+    return byRound.filter(
+      (m) =>
+        getTeamName(m.home).toLowerCase().includes(keyword) ||
+        getTeamName(m.away).toLowerCase().includes(keyword)
+    );
+  }, [byRound, debouncedSearch]);
+
+  const stats = useMemo(() => calcMatchStats(byRound), [byRound]);
 
   const leaderText =
     matches.length === 0 ? '—' : `${standings[0].name} (${standings[0].points} điểm)`;
 
-  const handleGoals = (id, homeGoals, awayGoals) => {
-    dispatch(setGoals({ id, homeGoals, awayGoals }));
+  // Tiêu đề tab
+  const title = matches.length > 0 ? `${standings[0].name} dẫn đầu – ${APP_TITLE}` : APP_TITLE;
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
+
+  
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === '/') {
+        const target = e.target;
+        const tag = target && target.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) {
+          return;
+        }
+        e.preventDefault();
+        if (searchRef.current) {
+          searchRef.current.focus();
+        }
+      } else if (e.key === 'Escape' && e.target === searchRef.current) {
+        setSearch('');
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
+  const handleTeamShift = (e) => {
+    setSearch(e.target.value);
   };
 
-  const handleRemove = (match) => {
-    dispatch(removeMatch(match.id));
-    showNotice(`Đã xóa trận ${getTeamName(match.home)} - ${getTeamName(match.away)}`);
-  };
+  const handleGoals = useCallback(
+    (id, homeGoals, awayGoals) => {
+      dispatch(setGoals({ id, homeGoals, awayGoals }));
+    },
+    [dispatch]
+  );
+
+  const handleRemove = useCallback(
+    (match) => {
+      dispatch(removeMatch(match.id));
+      showNotice(`Đã xóa trận ${getTeamName(match.home)} - ${getTeamName(match.away)}`);
+    },
+    [dispatch, showNotice]
+  );
+
+  const handleReset = useCallback(() => {
+    if (!data) {
+      showNotice('Chưa tải được dữ liệu mẫu');
+      return;
+    }
+    dispatch(setMatches(data));
+    showNotice('Đã đặt lại dữ liệu mẫu');
+  }, [data, dispatch, showNotice]);
+
+  
+  const showPage = hasSaved || (!loading && !error);
 
   return (
     <div className={`app ${theme}`} data-build={BUILD_TAG}>
@@ -60,10 +133,10 @@ function App() {
           {theme === 'light' ? 'Chế độ tối' : 'Chế độ sáng'}
         </button>
 
-        {loading && <p>Đang tải lịch thi đấu...</p>}
-        {error && <p>Không tải được lịch thi đấu</p>}
+        {!hasSaved && loading && <p>Đang tải lịch thi đấu...</p>}
+        {!hasSaved && error && <p>Không tải được lịch thi đấu</p>}
 
-        {!loading && !error && (
+        {showPage && (
           <>
             <section>
               <h2>Bảng xếp hạng</h2>
@@ -76,6 +149,23 @@ function App() {
               <p>{`Tổng số bàn thắng: ${stats.goals}`}</p>
               <p>{`Bàn thắng mỗi trận: ${stats.average.toFixed(2)}`}</p>
               <p>{`Đội dẫn đầu: ${leaderText}`}</p>
+              <h3>Phân bố kết quả</h3>
+              <ul>
+                {Object.keys(RESULT_LABELS).map((key) => (
+                  <li key={key}>
+                    {`${RESULT_LABELS[key]}: ${stats.counts[key]}`}
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        height: '10px',
+                        width: `${24 * stats.counts[key]}px`,
+                        backgroundColor: '#1976d2',
+                        marginLeft: '8px',
+                      }}
+                    />
+                  </li>
+                ))}
+              </ul>
             </section>
 
             <section>
@@ -89,6 +179,17 @@ function App() {
                   ))}
                 </select>
               </div>
+              <div className="field">
+                <label htmlFor="team-search">Tìm đội</label>
+                <input
+                  id="team-search"
+                  type="text"
+                  ref={searchRef}
+                  value={search}
+                  onChange={handleTeamShift}
+                />
+              </div>
+              <p>{`Tìm thấy ${visible.length} trận`}</p>
 
               {visible.length === 0 ? (
                 <p>Chưa có trận đấu nào</p>
@@ -102,59 +203,20 @@ function App() {
                       <th>BT khách</th>
                       <th>Đội khách</th>
                       <th>Kết quả</th>
+                      <th>Số lần render</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((m) => {
-                      const home = getTeamName(m.home);
-                      const away = getTeamName(m.away);
-                      const result = getResult(m);
-                      return (
-                        <tr key={m.id} style={result === 'draw' ? { backgroundColor: DRAW_BG } : undefined}>
-                          <td>{m.round}</td>
-                          <td>{home}</td>
-                          <td>
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              aria-label={`Bàn thắng nhà ${home} - ${away}`}
-                              value={m.homeGoals}
-                              onChange={(e) => {
-                                const v = e.target.valueAsNumber;
-                                if (Number.isInteger(v) && v >= 0 && v <= 20) {
-                                  handleGoals(m.id, v, m.awayGoals);
-                                }
-                              }}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              aria-label={`Bàn thắng khách ${home} - ${away}`}
-                              value={m.awayGoals}
-                              onChange={(e) => {
-                                const v = e.target.valueAsNumber;
-                                if (Number.isInteger(v) && v >= 0 && v <= 20) {
-                                  handleGoals(m.id, m.homeGoals, v);
-                                }
-                              }}
-                            />
-                          </td>
-                          <td>{away}</td>
-                          <td>{RESULT_LABELS[result]}</td>
-                          <td>
-                            <button type="button" onClick={() => handleRemove(m)}>Xóa</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {visible.map((m) => (
+                      <MatchRow key={m.id} match={m} onGoals={handleGoals} onRemove={handleRemove} />
+                    ))}
                   </tbody>
                 </table>
               )}
+              <button type="button" onClick={handleReset}>
+                Đặt lại dữ liệu mẫu
+              </button>
             </section>
 
             <section>
@@ -174,4 +236,5 @@ function App() {
 }
 
 export default App;
+
 
