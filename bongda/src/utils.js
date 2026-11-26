@@ -58,7 +58,6 @@ export const calcStandings = (matches) => {
     row.diff = row.gf - row.ga;
   });
 
-  // table là mảng mới tạo ra, sắp xếp ở đây không đụng tới state
   return table.sort(
     (a, b) =>
       b.points - a.points ||
@@ -78,4 +77,31 @@ export const calcMatchStats = (matches) => {
   const count = matches.length;
   const average = count === 0 ? 0 : Math.round((goals / count) * 100) / 100;
   return { count, goals, average, counts };
+};
+
+const parseInteger = (value) => {
+  const text = String(value).trim();
+  if (text === '') return NaN;
+  const n = Number(text);
+  return Number.isInteger(n) ? n : NaN;
+};
+
+export const calcNeeded = (standings, teamId, target, remaining) => {
+  const team = standings.find((t) => String(t.id) === String(teamId));
+  const goal = parseInteger(target);
+  const left = parseInteger(remaining);
+
+  if (!team || Number.isNaN(goal) || goal < 0 || Number.isNaN(left) || left < 1) {
+    return 'Hãy chọn đội, nhập số điểm mục tiêu (từ 0) và số trận còn lại (từ 1)';
+  }
+
+  const need = goal - team.points;
+  if (need <= 0) {
+    return 'Đội đã đạt mục tiêu';
+  }
+  if (need > 3 * left) {
+    return 'Không thể đạt mục tiêu này';
+  }
+  const wins = Math.max(0, Math.ceil((need - left) / 2));
+  return `Cần thêm ${need} điểm ở ${left} trận còn lại, tối thiểu ${wins} trận thắng`;
 };

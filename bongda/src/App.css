@@ -1,7 +1,15 @@
-.app { max-width: 960px; margin: 0 auto; padding: 16px; font-family: sans-serif; }
+.app { min-height: 100vh; font-family: sans-serif; }
+.app.light { background: #ffffff; color: #18212c; }
+.app.dark { background: #1f2430; color: #e8eaf0; }
+.container { max-width: 960px; margin: 0 auto; padding: 16px; }
 table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
-th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+th, td { border: 1px solid #8884; padding: 6px 8px; text-align: left; }
 td input[type="number"] { width: 60px; }
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; max-width: 280px; }
 .error { color: #c62828; font-size: 14px; }
+.notice {
+  position: fixed; top: 12px; right: 12px; z-index: 10;
+  background: #2e7d32; color: #fff; padding: 10px 16px; border-radius: 6px;
+}
+
 

@@ -1,12 +1,18 @@
 import { useRef, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { ROUNDS, TEAMS } from '../data';
-import { isValidGoals } from '../utils';
+import { addMatch, selectMatches } from '../features/matchesSlice';
+import { useNotice } from '../context/NoticeContext';
+import { getTeamName, isValidGoals } from '../utils';
 
 const EMPTY_FORM = { round: '1', home: '', away: '', homeGoals: '', awayGoals: '' };
 
 const isGoalsOk = (value) => value !== '' && isValidGoals(Number(value));
 
-function AddMatchForm({ matches, onAdd }) {
+function AddMatchForm() {
+  const matches = useSelector(selectMatches);
+  const dispatch = useDispatch();
+  const showNotice = useNotice();
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const homeRef = useRef(null);
@@ -48,13 +54,18 @@ function AddMatchForm({ matches, onAdd }) {
     if (Object.keys(next).length > 0) {
       return;
     }
-    onAdd({
-      round: Number(form.round),
-      home: Number(form.home),
-      away: Number(form.away),
-      homeGoals: Number(form.homeGoals),
-      awayGoals: Number(form.awayGoals),
-    });
+    const home = Number(form.home);
+    const away = Number(form.away);
+    dispatch(
+      addMatch({
+        round: Number(form.round),
+        home,
+        away,
+        homeGoals: Number(form.homeGoals),
+        awayGoals: Number(form.awayGoals),
+      })
+    );
+    showNotice(`Đã thêm trận ${getTeamName(home)} - ${getTeamName(away)}`);
     setForm(EMPTY_FORM);
     homeRef.current.focus();
   };
