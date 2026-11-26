@@ -1,0 +1,7 @@
+.app { max-width: 960px; margin: 0 auto; padding: 16px; font-family: sans-serif; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+td input[type="number"] { width: 60px; }
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; max-width: 280px; }
+.error { color: #c62828; font-size: 14px; }
+
